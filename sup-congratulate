@@ -169,9 +169,9 @@ def main():
     if args.template_file:
         if not os.path.isfile(path):
             par.error('no such file: ' + path)
-        with open(par.template_file) as f:
+        with open(args.template_file) as f:
             TEMPLATE = f.read()
-        logging.debug('loaded template from: %s' % par.template_file)
+        logging.debug('loaded template from: %s' % args.template_file)
 
     # Ensure consistency by determining date/time only once, globally
     now = datetime.datetime.today()
