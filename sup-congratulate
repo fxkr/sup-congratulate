@@ -16,11 +16,11 @@ From: {from}
 To: {to}
 Cc:
 Bcc:
-Subject: Alles Gute!
+Subject: Happy Birthday!
 
-Alles Gute zum Geburtstag!
+Happy birthday!
 
-Viele Grüße
+Cheers
 {by}
 '''
 
@@ -145,6 +145,7 @@ def main():
     par.add_argument('--draft-dir', type=os.path.expanduser, default=DRAFT_DIR)
     par.add_argument('--force', action='store_true')
     par.add_argument('--dry-run', action='store_true')
+    par.add_argument('--template-file', type=os.path.expanduser)
     par.add_argument('--marker-file', default=os.path.join(XDG_DATA_HOME, 'sup-congratulate-timestamp'))
     par.add_argument('--verbose', '-v', action='count', default=0)
     args = par.parse_args()
@@ -163,6 +164,14 @@ def main():
     for path in args.csvfiles:
         if not os.path.isfile(path):
             par.error('no such file: ' + path)
+
+    global TEMPLATE
+    if args.template_file:
+        if not os.path.isfile(path):
+            par.error('no such file: ' + path)
+        with open(par.template_file) as f:
+            TEMPLATE = f.read()
+        logging.debug('loaded template from: %s' % par.template_file)
 
     # Ensure consistency by determining date/time only once, globally
     now = datetime.datetime.today()
