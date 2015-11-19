@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+
+import argparse
+import csv
+import datetime
+import logging
+import os
+import posix
+import re
+import sys
+import tempfile
+
+
+TEMPLATE = '''\
+From: {from}
+To: {to}
+Cc:
+Bcc:
+Subject: Alles Gute!
+
+Alles Gute zum Geburtstag!
+
+Viele Grüße
+{by}
+'''
+
+
+expr = re.compile(r'(\d\d)\.(\d\d)(?:\.(\d\d\d\d))?')
+
+
+class Friend(object):
+
+    def __init__(self, email, month, day):
+        self.email = email
+        self.month = month
+        self.day = day
+
+    def is_birthday(self):
+        today = datetime.datetime.today()
+        return self.month == today.month and self.day == today.day
+
+    def __str__(self):
+        return 'Friend(%s, %i, %i)' % (
+            repr(self.email), self.month, self.day)
+
+
+def touch(path, dry_run=False):
+
+    # Return false if marker file exists and is from today
+    old_mtime = -1
+    try:
+        old_mtime = os.path.getmtime(path)
+        old_mtime_dt = datetime.datetime.fromtimestamp(old_mtime)
+        if old_mtime_dt.date() == datetime.date.today():
+            return False
+    except FileNotFoundError:
+        pass
+
+    # In dry run mode, just assume the timestamp modification would go alright
+    if dry_run:
+        return True
+
+    # Touch marker file
+    assert posix.utime in os.supports_fd
+    flags = os.O_CREAT | os.O_APPEND
+    with os.fdopen(os.open(path, flags=flags, mode=0o666)) as f:
+        os.utime(f.fileno())
+
+    # Return false if modification time hasn't changed
+    new_mtime = os.path.getmtime(path)
+    if new_mtime <= old_mtime:
+        return False
+
+    return True
+
+
+def parse(path, date_col, email_col):
+    with open(path, newline='', encoding='utf-8') as f:
+        for cols in csv.reader(f, dialect='excel-tab'):
+            if len(cols) < max(date_col, email_col) + 1:
+                continue
+            date = cols[date_col]
+            email = cols[email_col]
+            match = expr.match(date)
+            if not match:
+                continue
+            dd_str, mm_str, maybe_yyyy_str = match.groups()
+            d_int = int(dd_str)
+            m_int = int(mm_str)
+            assert 1 <= d_int <= 31
+            assert 1 <= m_int <= 12
+            yield Friend(email, m_int, d_int)
+
+
+
+def save_draft(today, directory, to, message, dry_run):
+
+    # Save message to disk
+    if not dry_run:
+        with tempfile.NamedTemporaryFile(delete=False) as named_temp_file:
+            named_temp_file.file.write(message.encode("utf-8"))
+
+    # Sup draft files must be numbers.
+    # Let's guess one that's not too arbitrary (easier for debugging)
+    # but very likely to be free.
+    for i in range(0, 99):
+        filename = "%04i%02i%02i%02i" % (today.year, today.month, today.day, i)
+        temp_file = os.path.join(directory, '.' + filename + '.tmp')
+        if os.path.exists(temp_file):
+            continue
+        draft_file = os.path.join(directory, filename)
+        if os.path.exists(draft_file):
+            continue
+        break
+    else:
+        # Couldn't find the free name. We'll miss this birthday.
+        logging.error('couldn\'t find free draft filename for %s' % repr(to))
+        assert False
+
+    # Write to temporary file, because writing files isn't atomic
+    with open(temp_file, 'w') as f:
+        f.write(message)
+
+    # Move is an atomic operation
+    if not dry_run:
+        os.rename(temp_file, draft_file)
+
+
+def main():
+
+    # Auto-detect where draft directory is (as a default for --draft-dir)
+    HOME = os.path.expanduser("~")
+    XDG_DATA_HOME = os.environ.get("XDG_DATA_HOME", os.path.join(HOME, ".local", "share"))
+    if os.path.isdir(os.path.join(HOME, '.sup', 'drafts')):
+        DRAFT_DIR = os.path.join(HOME, '.sup', 'drafts')
+    else:
+        DRAFT_DIR = os.path.join(XDG_DATA_HOME, 'sup', 'drafts')
+
+    par = argparse.ArgumentParser()
+    par.add_argument('csvfiles', nargs='*')
+    par.add_argument('--by', dest='by', type=str, required=True)
+    par.add_argument('--from', dest='from_email', type=str, required=True)
+    par.add_argument('--date-col', type=int, required=True)
+    par.add_argument('--email-col', type=int, required=True)
+    par.add_argument('--draft-dir', type=os.path.expanduser, default=DRAFT_DIR)
+    par.add_argument('--force', action='store_true')
+    par.add_argument('--dry-run', action='store_true')
+    par.add_argument('--marker-file', default=os.path.join(XDG_DATA_HOME, 'sup-congratulate-timestamp'))
+    par.add_argument('--verbose', '-v', action='count', default=0)
+    args = par.parse_args()
+
+    # Choose log level
+    if args.verbose <= 0:
+        level = logging.WARN
+    elif args.verbose == 1:
+        level = logging.INFO
+    elif args.verbose >= 2:
+        level = logging.DEBUG
+    logging.basicConfig(stream=sys.stderr, level=level)
+
+    if not os.path.isdir(args.draft_dir):
+        par.error('--draft-dir: no such directory: ' + args.draft_dir)
+    for path in args.csvfiles:
+        if not os.path.isfile(path):
+            par.error('no such file: ' + path)
+
+    # Ensure consistency by determining date/time only once, globally
+    now = datetime.datetime.today()
+    today = now.date()
+
+    # Try very hard not to run more than once per day
+    may_run = touch(args.marker_file, args.dry_run)
+    if not may_run and not args.force:
+        return
+
+    for path in args.csvfiles:
+        for friend in parse(path, args.date_col - 1, args.email_col - 1):
+
+            if not friend.is_birthday():
+                continue
+
+            if not friend.email:
+                continue
+
+            message = TEMPLATE.format(**{
+                'from': args.from_email,
+                'to': friend.email,
+                'by': args.by,
+            })
+
+            logging.debug('saving draft for %s' % repr(friend.email))
+            save_draft(today, args.draft_dir, friend.email, message, args.dry_run)
+
+
+if __name__ == '__main__':
+    main()
+
