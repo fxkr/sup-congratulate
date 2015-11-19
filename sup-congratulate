@@ -146,7 +146,7 @@ def main():
     par.add_argument('--force', action='store_true')
     par.add_argument('--dry-run', action='store_true')
     par.add_argument('--template-file', type=os.path.expanduser)
-    par.add_argument('--marker-file', default=os.path.join(XDG_DATA_HOME, 'sup-congratulate-timestamp'))
+    par.add_argument('--marker-file', type=os.path.expanduser, default=os.path.join(XDG_DATA_HOME, 'sup-congratulate-timestamp'))
     par.add_argument('--verbose', '-v', action='count', default=0)
     args = par.parse_args()
 
