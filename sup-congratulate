@@ -3,6 +3,7 @@
 import argparse
 import csv
 import datetime
+import itertools
 import logging
 import os
 import posix
@@ -93,18 +94,23 @@ def parse(path, date_col, email_col):
 
 
 
-def save_draft(today, directory, to, message, dry_run):
+def save_draft(now, directory, to, message, dry_run):
 
     # Save message to disk
     if not dry_run:
         with tempfile.NamedTemporaryFile(delete=False) as named_temp_file:
             named_temp_file.file.write(message.encode("utf-8"))
 
-    # Sup draft files must be numbers.
-    # Let's guess one that's not too arbitrary (easier for debugging)
-    # but very likely to be free.
-    for i in range(0, 99):
-        filename = "%04i%02i%02i%02i" % (today.year, today.month, today.day, i)
+    # Sup draft filenames must be numbers, and it'll only load drafts with numbers
+    # greater than the largest previously seen one. Luckily Ruby has arbitrary
+    # length numbers and so we can just use a timestamp. (It has to be a UTC
+    # timestamp though, because of daylight savings time.)
+    timestamp = int(
+          now.year*1e12 + now.month*1e10 + now.day*1e8
+        + now.hour*1e6 + now.minute*1e4 + now.second*1e2
+        + 00*1e0)
+    for i in itertools.count(timestamp):
+        filename = str(i)
         temp_file = os.path.join(directory, '.' + filename + '.tmp')
         if os.path.exists(temp_file):
             continue
@@ -112,10 +118,6 @@ def save_draft(today, directory, to, message, dry_run):
         if os.path.exists(draft_file):
             continue
         break
-    else:
-        # Couldn't find the free name. We'll miss this birthday.
-        logging.error('couldn\'t find free draft filename for %s' % repr(to))
-        assert False
 
     # Write to temporary file, because writing files isn't atomic
     with open(temp_file, 'w') as f:
@@ -198,7 +200,7 @@ def main():
             })
 
             logging.debug('saving draft for %s' % repr(friend.email))
-            save_draft(today, args.draft_dir, friend.email, message, args.dry_run)
+            save_draft(now, args.draft_dir, friend.email, message, args.dry_run)
 
 
 if __name__ == '__main__':
