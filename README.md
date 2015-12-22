@@ -28,7 +28,7 @@ some time and automated (some part of) it. ;-)
 
 1. Create a tab-separated CSV file of friends, for example in
    `~/.config/sup-congratulate-friends`. It needs to contain at least
-   a column with dates (in `MM.DD.YYYY` or `MM.DD` form) and a column
+   a column with dates (in `DD.MM.YYYY` or `DD.MM` form) and a column
    with names / email adresses (`John Doe <john@example.com>`).
 
   ```
