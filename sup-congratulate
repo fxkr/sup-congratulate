@@ -26,7 +26,7 @@ Cheers
 '''
 
 
-expr = re.compile(r'(\d\d)\.(\d\d)(?:\.(\d\d\d\d))?')
+expr = re.compile(r'^(\d\d)\.(\d\d)(?:\.?$|\.(\d\d\d\d)$)?')
 
 
 class Friend(object):
