@@ -199,7 +199,7 @@ def main():
                 'by': args.by,
             })
 
-            logging.debug('saving draft for %s' % repr(friend.email))
+            logging.info('saving draft for %s' % repr(friend.email))
             save_draft(now, args.draft_dir, friend.email, message, args.dry_run)
 
 
